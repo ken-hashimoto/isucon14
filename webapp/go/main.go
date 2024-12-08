@@ -57,6 +57,7 @@ func setup() http.Handler {
 	}
 
 	dbConfig := mysql.NewConfig()
+	dbConfig.InterpolateParams = true
 	dbConfig.User = user
 	dbConfig.Passwd = password
 	dbConfig.Addr = net.JoinHostPort(host, port)
