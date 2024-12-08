@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/isucon/isucon14/webapp/go/godb"
+	"github.com/isucon/isucon14/webapp/go/sqlcgen"
 	"github.com/jmoiron/sqlx"
 	"github.com/oklog/ulid/v2"
 )
@@ -41,83 +43,86 @@ func appPostUsers(w http.ResponseWriter, r *http.Request) {
 	accessToken := secureRandomStr(32)
 	invitationCode := secureRandomStr(15)
 
-	tx, err := db.Beginx()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	defer tx.Rollback()
-
-	_, err = tx.ExecContext(
-		ctx,
-		"INSERT INTO users (id, username, firstname, lastname, date_of_birth, access_token, invitation_code) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		userID, req.Username, req.FirstName, req.LastName, req.DateOfBirth, accessToken, invitationCode,
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-
-	// 初回登録キャンペーンのクーポンを付与
-	_, err = tx.ExecContext(
-		ctx,
-		"INSERT INTO coupons (user_id, code, discount) VALUES (?, ?, ?)",
-		userID, "CP_NEW2024", 3000,
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-
-	// 招待コードを使った登録
-	if req.InvitationCode != nil && *req.InvitationCode != "" {
-		// 招待する側の招待数をチェック
-		var coupons []Coupon
-		err = tx.SelectContext(ctx, &coupons, "SELECT * FROM coupons WHERE code = ? FOR UPDATE", "INV_"+*req.InvitationCode)
+	tx := godb.NewTransaction(db)
+	err := tx.Transaction(ctx, func(ctx context.Context) error {
+		_, err := db.Queries(ctx).CreateUsers(
+			ctx,
+			sqlcgen.CreateUsersParams{
+				ID:             userID,
+				Username:       req.Username,
+				Firstname:      req.FirstName,
+				Lastname:       req.LastName,
+				DateOfBirth:    req.DateOfBirth,
+				AccessToken:    accessToken,
+				InvitationCode: invitationCode,
+			},
+		)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		if len(coupons) >= 3 {
-			writeError(w, http.StatusBadRequest, errors.New("この招待コードは使用できません。"))
-			return
+			return err
 		}
 
-		// ユーザーチェック
-		var inviter User
-		err = tx.GetContext(ctx, &inviter, "SELECT * FROM users WHERE invitation_code = ?", *req.InvitationCode)
+		// 初回登録キャンペーンのクーポンを付与
+		_, err = db.Queries(ctx).CreateCoupons(
+			ctx,
+			sqlcgen.CreateCouponsParams{
+				UserID:   userID,
+				Code:     "CP_NEW2024",
+				Discount: 3000,
+			},
+		)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusBadRequest, errors.New("この招待コードは使用できません。"))
-				return
+			return err
+		}
+
+		// 招待コードを使った登録
+		if req.InvitationCode != nil && *req.InvitationCode != "" {
+			// 招待する側の招待数をチェック
+			coupons, err := db.Queries(ctx).GetCouponsByCode(ctx, "INV_"+*req.InvitationCode)
+			if err != nil {
+				return err
 			}
-			writeError(w, http.StatusInternalServerError, err)
-			return
+			if len(coupons) >= 3 {
+				return errors.New("この招待コードは使用できません。")
+			}
+
+			// ユーザーチェック
+			inviter, err := db.Queries(ctx).GetUserByInvitationCode(ctx, *req.InvitationCode)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errors.New("この招待コードは使用できません。")
+				}
+				return err
+			}
+
+			// 招待クーポン付与
+			_, err = db.Queries(ctx).CreateCoupons(
+				ctx,
+				sqlcgen.CreateCouponsParams{
+					UserID:   userID,
+					Code:     "INV_" + *req.InvitationCode,
+					Discount: 1500,
+				},
+			)
+			if err != nil {
+				return err
+			}
+			// 招待した人にもRewardを付与
+			_, err = db.Queries(ctx).CreateCouponsWihtCalc(
+				ctx,
+				sqlcgen.CreateCouponsWihtCalcParams{
+					UserID:   inviter.ID,
+					CONCAT:   "RWD_" + *req.InvitationCode,
+					Discount: 1000,
+				},
+			)
+			if err != nil {
+				return err
+			}
 		}
 
-		// 招待クーポン付与
-		_, err = tx.ExecContext(
-			ctx,
-			"INSERT INTO coupons (user_id, code, discount) VALUES (?, ?, ?)",
-			userID, "INV_"+*req.InvitationCode, 1500,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		// 招待した人にもRewardを付与
-		_, err = tx.ExecContext(
-			ctx,
-			"INSERT INTO coupons (user_id, code, discount) VALUES (?, CONCAT(?, '_', FLOOR(UNIX_TIMESTAMP(NOW(3))*1000)), ?)",
-			inviter.ID, "RWD_"+*req.InvitationCode, 1000,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
+		return nil
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -152,11 +157,12 @@ func appPostPaymentMethods(w http.ResponseWriter, r *http.Request) {
 
 	user := ctx.Value("user").(*User)
 
-	_, err := db.ExecContext(
+	_, err := db.Queries(ctx).CreatePaymentToken(
 		ctx,
-		`INSERT INTO payment_tokens (user_id, token) VALUES (?, ?)`,
-		user.ID,
-		req.Token,
+		sqlcgen.CreatePaymentTokenParams{
+			UserID: user.ID,
+			Token:  req.Token,
+		},
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -192,73 +198,67 @@ func appGetRides(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := ctx.Value("user").(*User)
 
-	tx, err := db.Beginx()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	defer tx.Rollback()
-
-	rides := []Ride{}
-	if err := tx.SelectContext(
+	rides, err := db.Queries(ctx).GetRidesByUserID(
 		ctx,
-		&rides,
-		`SELECT * FROM rides WHERE user_id = ? ORDER BY created_at DESC`,
 		user.ID,
-	); err != nil {
+	)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	items := []getAppRidesResponseItem{}
-	for _, ride := range rides {
-		status, err := getLatestRideStatus(ctx, tx, ride.ID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
+	tx := godb.NewTransaction(db)
+	err = tx.Transaction(ctx, func(ctx context.Context) error {
+		for _, ride := range rides {
+			status, err := getLatestRideStatus(ctx, tx, ride.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if status != "COMPLETED" {
+				continue
+			}
+
+			fare, err := calculateDiscountedFare(ctx, tx, user.ID, &ride, ride.PickupLatitude, ride.PickupLongitude, ride.DestinationLatitude, ride.DestinationLongitude)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+
+			item := getAppRidesResponseItem{
+				ID:                    ride.ID,
+				PickupCoordinate:      Coordinate{Latitude: ride.PickupLatitude, Longitude: ride.PickupLongitude},
+				DestinationCoordinate: Coordinate{Latitude: ride.DestinationLatitude, Longitude: ride.DestinationLongitude},
+				Fare:                  fare,
+				Evaluation:            *ride.Evaluation,
+				RequestedAt:           ride.CreatedAt.UnixMilli(),
+				CompletedAt:           ride.UpdatedAt.UnixMilli(),
+			}
+
+			item.Chair = getAppRidesResponseItemChair{}
+
+			chair := &Chair{}
+			if err := tx.GetContext(ctx, chair, `SELECT * FROM chairs WHERE id = ?`, ride.ChairID); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			item.Chair.ID = chair.ID
+			item.Chair.Name = chair.Name
+			item.Chair.Model = chair.Model
+
+			owner := &Owner{}
+			if err := tx.GetContext(ctx, owner, `SELECT * FROM owners WHERE id = ?`, chair.OwnerID); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			item.Chair.Owner = owner.Name
+
+			items = append(items, item)
 		}
-		if status != "COMPLETED" {
-			continue
-		}
-
-		fare, err := calculateDiscountedFare(ctx, tx, user.ID, &ride, ride.PickupLatitude, ride.PickupLongitude, ride.DestinationLatitude, ride.DestinationLongitude)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-
-		item := getAppRidesResponseItem{
-			ID:                    ride.ID,
-			PickupCoordinate:      Coordinate{Latitude: ride.PickupLatitude, Longitude: ride.PickupLongitude},
-			DestinationCoordinate: Coordinate{Latitude: ride.DestinationLatitude, Longitude: ride.DestinationLongitude},
-			Fare:                  fare,
-			Evaluation:            *ride.Evaluation,
-			RequestedAt:           ride.CreatedAt.UnixMilli(),
-			CompletedAt:           ride.UpdatedAt.UnixMilli(),
-		}
-
-		item.Chair = getAppRidesResponseItemChair{}
-
-		chair := &Chair{}
-		if err := tx.GetContext(ctx, chair, `SELECT * FROM chairs WHERE id = ?`, ride.ChairID); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		item.Chair.ID = chair.ID
-		item.Chair.Name = chair.Name
-		item.Chair.Model = chair.Model
-
-		owner := &Owner{}
-		if err := tx.GetContext(ctx, owner, `SELECT * FROM owners WHERE id = ?`, chair.OwnerID); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		item.Chair.Owner = owner.Name
-
-		items = append(items, item)
-	}
-
-	if err := tx.Commit(); err != nil {
+		return nil
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

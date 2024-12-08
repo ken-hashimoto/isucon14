@@ -13,13 +13,14 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/isucon/isucon14/webapp/go/godb"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 )
 
-var db *sqlx.DB
+var db godb.DB
 
 func main() {
 	mux := setup()
@@ -64,7 +65,7 @@ func setup() http.Handler {
 	dbConfig.DBName = dbname
 	dbConfig.ParseTime = true
 
-	_db, err := sqlx.Connect("mysql", dbConfig.FormatDSN())
+	_db, err := godb.NewDB(dbConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -138,7 +139,9 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := db.ExecContext(ctx, "UPDATE settings SET value = ? WHERE name = 'payment_gateway_url'", req.PaymentServer); err != nil {
+	queries := db.Queries(ctx)
+
+	if _, err := queries.UpdatePaymentGatewayURLValue(ctx, req.PaymentServer); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

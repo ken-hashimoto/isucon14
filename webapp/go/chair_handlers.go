@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/isucon/isucon14/webapp/go/sqlcgen"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -45,10 +46,16 @@ func chairPostChairs(w http.ResponseWriter, r *http.Request) {
 	chairID := ulid.Make().String()
 	accessToken := secureRandomStr(32)
 
-	_, err := db.ExecContext(
+	_, err := db.Queries(ctx).CreateChairs(
 		ctx,
-		"INSERT INTO chairs (id, owner_id, name, model, is_active, access_token) VALUES (?, ?, ?, ?, ?, ?)",
-		chairID, owner.ID, req.Name, req.Model, false, accessToken,
+		sqlcgen.CreateChairsParams{
+			ID:          chairID,
+			OwnerID:     owner.ID,
+			Name:        req.Name,
+			Model:       req.Model,
+			IsActive:    false,
+			AccessToken: accessToken,
+		},
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
