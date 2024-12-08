@@ -37,6 +37,7 @@ CREATE TABLE chairs
   COMMENT = '椅子情報テーブル';
 CREATE INDEX idx_chairs_owner_id ON chairs (owner_id);
 CREATE INDEX idx_chairs_is_active ON chairs (is_active);
+CREATE INDEX idx_chairs_access_token ON chairs (access_token);
 
 DROP TABLE IF EXISTS chair_locations;
 CREATE TABLE chair_locations
@@ -69,6 +70,7 @@ CREATE TABLE users
   UNIQUE (invitation_code)
 )
   COMMENT = '利用者情報テーブル';
+CREATE INDEX idx_users_access_token ON users (access_token);
 
 DROP TABLE IF EXISTS payment_tokens;
 CREATE TABLE payment_tokens
@@ -131,6 +133,8 @@ CREATE TABLE owners
   UNIQUE (chair_register_token)
 )
   COMMENT = '椅子のオーナー情報テーブル';
+CREATE INDEX idx_owners_access_token ON owners (access_token);
+
 -- chairPostChairs では chair_register_token を使って owners テーブルを検索しています。
 CREATE UNIQUE INDEX idx_chair_register_token ON owners (chair_register_token);
 
