@@ -2,7 +2,6 @@ package main
 
 import (
 	crand "crypto/rand"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -10,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+
+	jsoniter "github.com/json-iterator/go"
 
 	_ "net/http/pprof"
 
@@ -20,6 +21,7 @@ import (
 )
 
 var db *sqlx.DB
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func main() {
 	mux := setup()
