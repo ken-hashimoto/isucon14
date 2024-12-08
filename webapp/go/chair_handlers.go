@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -272,7 +271,7 @@ type postChairRidesRideIDStatusRequest struct {
 
 func chairPostRideStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rideID := chi.URLParam(r, "ride_id")
+	rideID := r.PathValue("ride_id")
 
 	chair := ctx.Value("chair").(*Chair)
 
