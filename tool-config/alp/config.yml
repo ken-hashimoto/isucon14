@@ -1,49 +1,14 @@
 # グループ化のルールを記述
 aggregates:
-  # Chair関連APIのグループ化
-  - pattern: ^/api/chair/rides/[a-zA-Z0-9-]+
-    name: /api/chair/rides/*
-  - pattern: ^/api/chair/notification
-    name: /api/chair/notification
-  - pattern: ^/api/chair/coordinate
-    name: /api/chair/coordinate
-
-  # App関連APIのグループ化
-  - pattern: ^/api/app/rides/[a-zA-Z0-9-]+/evaluation
+  - pattern: ^/api/app/rides/[a-zA-Z0-9_-]+/evaluation
     name: /api/app/rides/*/evaluation
-  - pattern: ^/api/app/rides
-    name: /api/app/rides
-  - pattern: ^/api/app/notification
-    name: /api/app/notification
-  - pattern: ^/api/app/payment-methods
-    name: /api/app/payment-methods
-  - pattern: ^/api/app/users
-    name: /api/app/users
-  - pattern: ^/api/app/nearby-chairs
-    name: /api/app/nearby-chairs
-
-  # Owner関連APIのグループ化
-  - pattern: ^/api/owner/sales
-    name: /api/owner/sales
-  - pattern: ^/api/owner/chairs
-    name: /api/owner/chairs
-  - pattern: ^/api/owner/owners
-    name: /api/owner/owners
+  - pattern: ^/api/chair/rides/[a-zA-Z0-9_-]+/status
+    name: /api/chair/rides/*/status
 
   # 静的アセットのグループ化
   - pattern: ^/assets/.+
     name: /assets/*
   - pattern: ^/images/.+
     name: /images/*
-
-  # その他のグループ化
-  - pattern: ^/favicon.ico
-    name: /favicon.ico
-  - pattern: ^/index.html
-    name: /index.html
-  - pattern: ^/client
-    name: /client
-  - pattern: ^/owner
-    name: /owner
 # ソート順
 # sort: count
