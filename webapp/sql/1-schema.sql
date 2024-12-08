@@ -47,6 +47,7 @@ CREATE TABLE chair_locations
   PRIMARY KEY (id)
 )
   COMMENT = '椅子の現在位置情報テーブル';
+CREATE INDEX idx_chair_id ON chair_locations (chair_id, created_at);
 
 DROP TABLE IF EXISTS users;
 CREATE TABLE users

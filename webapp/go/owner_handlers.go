@@ -195,7 +195,21 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
 	owner := ctx.Value("owner").(*Owner)
 
 	chairs := []chairWithDetail{}
-	if err := db.SelectContext(ctx, &chairs, `SELECT id,
+	if err := db.SelectContext(ctx, &chairs, `WITH distance_table AS (
+    SELECT chair_id,
+           SUM(distance) AS total_distance,
+           MAX(created_at) AS total_distance_updated_at
+    FROM (
+        SELECT chair_id,
+               created_at,
+               ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
+               ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
+        FROM chair_locations
+        WHERE owner_id = ?
+    ) tmp
+    GROUP BY chair_id
+)
+SELECT id,
        owner_id,
        name,
        access_token,
@@ -203,18 +217,10 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
        is_active,
        created_at,
        updated_at,
-       IFNULL(total_distance, 0) AS total_distance,
+       COALESCE(total_distance, 0) AS total_distance,
        total_distance_updated_at
 FROM chairs
-       LEFT JOIN (SELECT chair_id,
-                          SUM(IFNULL(distance, 0)) AS total_distance,
-                          MAX(created_at)          AS total_distance_updated_at
-                   FROM (SELECT chair_id,
-                                created_at,
-                                ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
-                                ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
-                         FROM chair_locations) tmp
-                   GROUP BY chair_id) distance_table ON distance_table.chair_id = chairs.id
+LEFT JOIN distance_table ON distance_table.chair_id = chairs.id
 WHERE owner_id = ?
 `, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -222,7 +228,8 @@ WHERE owner_id = ?
 	}
 
 	res := ownerGetChairResponse{}
-	for _, chair := range chairs {
+	res.Chairs = make([]ownerGetChairResponseChair, len(chairs))
+	for i, chair := range chairs {
 		c := ownerGetChairResponseChair{
 			ID:            chair.ID,
 			Name:          chair.Name,
@@ -235,7 +242,7 @@ WHERE owner_id = ?
 			t := chair.TotalDistanceUpdatedAt.Time.UnixMilli()
 			c.TotalDistanceUpdatedAt = &t
 		}
-		res.Chairs = append(res.Chairs, c)
+		res.Chairs[i] = c
 	}
 	writeJSON(w, http.StatusOK, res)
 }
