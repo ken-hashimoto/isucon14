@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strconv"
 
+	_ "net/http/pprof"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-sql-driver/mysql"
@@ -26,6 +28,9 @@ func main() {
 }
 
 func setup() http.Handler {
+	go func() {
+		http.ListenAndServe(":6060", nil)
+	}()
 	host := os.Getenv("ISUCON_DB_HOST")
 	if host == "" {
 		host = "127.0.0.1"
