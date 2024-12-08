@@ -205,7 +205,6 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
                ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
                ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
         FROM chair_locations
-        WHERE owner_id = ?
     ) tmp
     GROUP BY chair_id
 )
@@ -222,7 +221,7 @@ SELECT id,
 FROM chairs
 LEFT JOIN distance_table ON distance_table.chair_id = chairs.id
 WHERE owner_id = ?
-`, owner.ID, owner.ID); err != nil {
+`, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
