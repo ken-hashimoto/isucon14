@@ -9,12 +9,109 @@ import (
 	"context"
 )
 
+const countRidesByUserID = `-- name: CountRidesByUserID :one
+SELECT COUNT(*) FROM rides WHERE user_id = ?
+`
+
+func (q *Queries) CountRidesByUserID(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countRidesByUserID, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createRide = `-- name: CreateRide :exec
+INSERT INTO rides (id, user_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude) VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type CreateRideParams struct {
+	ID                   string
+	UserID               string
+	PickupLatitude       int32
+	PickupLongitude      int32
+	DestinationLatitude  int32
+	DestinationLongitude int32
+}
+
+func (q *Queries) CreateRide(ctx context.Context, arg CreateRideParams) error {
+	_, err := q.db.Exec(ctx, createRide,
+		arg.ID,
+		arg.UserID,
+		arg.PickupLatitude,
+		arg.PickupLongitude,
+		arg.DestinationLatitude,
+		arg.DestinationLongitude,
+	)
+	return err
+}
+
+const createRideStatus = `-- name: CreateRideStatus :exec
+INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)
+`
+
+type CreateRideStatusParams struct {
+	ID     string
+	RideID string
+	Status RideStatusesStatus
+}
+
+func (q *Queries) CreateRideStatus(ctx context.Context, arg CreateRideStatusParams) error {
+	_, err := q.db.Exec(ctx, createRideStatus, arg.ID, arg.RideID, arg.Status)
+	return err
+}
+
+const getLatestRideStatusByRideID = `-- name: GetLatestRideStatusByRideID :one
+SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1
+`
+
+func (q *Queries) GetLatestRideStatusByRideID(ctx context.Context, rideID string) (RideStatusesStatus, error) {
+	row := q.db.QueryRow(ctx, getLatestRideStatusByRideID, rideID)
+	var status RideStatusesStatus
+	err := row.Scan(&status)
+	return status, err
+}
+
 const getRidesByUserID = `-- name: GetRidesByUserID :many
-SELECT id, user_id, chair_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude, evaluation, created_at, updated_at FROM rides WHERE user_id = ? ORDER BY created_at DESC
+SELECT id, user_id, chair_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude, evaluation, created_at, updated_at FROM rides WHERE user_id = ?
 `
 
 func (q *Queries) GetRidesByUserID(ctx context.Context, userID string) ([]Ride, error) {
 	rows, err := q.db.Query(ctx, getRidesByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ride
+	for rows.Next() {
+		var i Ride
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ChairID,
+			&i.PickupLatitude,
+			&i.PickupLongitude,
+			&i.DestinationLatitude,
+			&i.DestinationLongitude,
+			&i.Evaluation,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRidesByUserIDOrderedByCreatedAtDesc = `-- name: GetRidesByUserIDOrderedByCreatedAtDesc :many
+SELECT id, user_id, chair_id, pickup_latitude, pickup_longitude, destination_latitude, destination_longitude, evaluation, created_at, updated_at FROM rides WHERE user_id = ? ORDER BY created_at DESC
+`
+
+func (q *Queries) GetRidesByUserIDOrderedByCreatedAtDesc(ctx context.Context, userID string) ([]Ride, error) {
+	rows, err := q.db.Query(ctx, getRidesByUserIDOrderedByCreatedAtDesc, userID)
 	if err != nil {
 		return nil, err
 	}

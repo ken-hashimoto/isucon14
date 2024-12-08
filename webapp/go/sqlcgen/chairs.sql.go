@@ -36,3 +36,23 @@ func (q *Queries) CreateChairs(ctx context.Context, arg CreateChairsParams) (int
 	}
 	return result.RowsAffected(), nil
 }
+
+const getChairByID = `-- name: GetChairByID :one
+SELECT id, owner_id, name, model, is_active, access_token, created_at, updated_at FROM chairs WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetChairByID(ctx context.Context, id string) (Chair, error) {
+	row := q.db.QueryRow(ctx, getChairByID, id)
+	var i Chair
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Model,
+		&i.IsActive,
+		&i.AccessToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

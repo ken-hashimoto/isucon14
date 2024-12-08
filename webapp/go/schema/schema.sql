@@ -35,6 +35,8 @@ CREATE TABLE chairs
   PRIMARY KEY (id)
 )
   COMMENT = '椅子情報テーブル';
+CREATE INDEX idx_chairs_owner_id ON chairs (owner_id);
+CREATE INDEX idx_chairs_is_active ON chairs (is_active);
 
 DROP TABLE IF EXISTS chair_locations;
 CREATE TABLE chair_locations
@@ -94,6 +96,10 @@ CREATE TABLE rides
   PRIMARY KEY (id)
 )
   COMMENT = 'ライド情報テーブル';
+-- chairGetNotification 関数で、chair_id に基づき rides を検索。
+-- appGetNotification 関数で、user_id に基づき rides を検索。
+CREATE INDEX idx_rides_chair_id_updated_at ON rides (chair_id, updated_at DESC);
+CREATE INDEX idx_rides_user_id_created_at ON rides (user_id, created_at DESC);
 
 DROP TABLE IF EXISTS ride_statuses;
 CREATE TABLE ride_statuses
@@ -107,6 +113,8 @@ CREATE TABLE ride_statuses
   PRIMARY KEY (id)
 )
   COMMENT = 'ライドステータスの変更履歴テーブル';
+-- chairGetNotification ハンドラーでは ride_id と chair_sent_at IS NULL の条件を持つクエリが頻繁に使用さている
+CREATE INDEX idx_ride_id_chair_sent_at ON ride_statuses (ride_id, chair_sent_at, created_at);
 
 DROP TABLE IF EXISTS owners;
 CREATE TABLE owners
@@ -123,6 +131,8 @@ CREATE TABLE owners
   UNIQUE (chair_register_token)
 )
   COMMENT = '椅子のオーナー情報テーブル';
+-- chairPostChairs では chair_register_token を使って owners テーブルを検索しています。
+CREATE UNIQUE INDEX idx_chair_register_token ON owners (chair_register_token);
 
 DROP TABLE IF EXISTS coupons;
 CREATE TABLE coupons
