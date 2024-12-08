@@ -263,8 +263,10 @@ mv-logs:
 	$(eval when := $(shell date "+%s"))
 	sudo mkdir -p ~/logs/$(when)
 	sudo test -f $(NGINX_LOG) && \
+		sudo mkdir -p ~/logs/nginx/$(when)
 		sudo mv -f $(NGINX_LOG) ~/logs/nginx/$(when)/ || echo ""
 	sudo test -f $(DB_SLOW_LOG) && \
+		sudo mkdir -p ~/logs/mysql/$(when)
 		sudo mv -f $(DB_SLOW_LOG) ~/logs/mysql/$(when)/ || echo ""
 
 .PHONY: watch-service-log
