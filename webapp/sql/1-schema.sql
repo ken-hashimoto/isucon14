@@ -115,6 +115,8 @@ CREATE TABLE ride_statuses
   COMMENT = 'ライドステータスの変更履歴テーブル';
 -- chairGetNotification ハンドラーでは ride_id と chair_sent_at IS NULL の条件を持つクエリが頻繁に使用さている
 CREATE INDEX idx_ride_id_chair_sent_at ON ride_statuses (ride_id, chair_sent_at, created_at);
+CREATE INDEX idx_ride_id_created_at ON ride_statuses (created_at);
+
 
 DROP TABLE IF EXISTS owners;
 CREATE TABLE owners
