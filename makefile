@@ -256,8 +256,6 @@ restart:
 	sudo systemctl restart $(SERVICE_NAME)
 	sudo systemctl restart mysql
 	sudo systemctl restart nginx
-	sudo chmod 644 /etc/powerdns/pdns.conf
-	sudo systemctl restart pdns.service
 
 
 .PHONY: mv-logs
