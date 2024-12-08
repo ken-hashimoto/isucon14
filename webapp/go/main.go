@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
-	"time"
 
 	_ "net/http/pprof"
 
@@ -139,72 +137,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to initialize: %s: %w", string(out), err))
 		return
 	}
-	// ここで初期化
-	tx, err := db.Beginx()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	defer tx.Rollback()
-	chairLocations := []ChairLocation{}
-	err = tx.GetContext(
-		ctx,
-		&chairLocations,
-		`SELECT * FROM chair_locations ORDER BY created_at`,
-	)
-	type totalLoc struct {
-		totalDistance int
-		lastUpdatedAt time.Time
-	}
-	type lastLoc struct {
-		latitude  int
-		longitude int
-	}
-	prevChairLocation := map[string]lastLoc{}
-	distanceByChair := map[string]totalLoc{}
 
-	for _, loc := range chairLocations {
-		if prevLoc, exists := prevChairLocation[loc.ChairID]; exists {
-			currentTotal := distanceByChair[loc.ChairID]
-			distanceByChair[loc.ChairID] = totalLoc{
-				totalDistance: currentTotal.totalDistance +
-					abs(prevLoc.longitude-loc.Longitude) +
-					abs(prevLoc.latitude-loc.Latitude),
-				lastUpdatedAt: loc.CreatedAt,
-			}
-		} else {
-			distanceByChair[loc.ChairID] = totalLoc{
-				totalDistance: 0,
-				lastUpdatedAt: loc.CreatedAt,
-			}
-		}
-		prevChairLocation[loc.ChairID] = lastLoc{
-			latitude:  loc.Latitude,
-			longitude: loc.Longitude,
-		}
-	}
-
-	// クエリのベース部分
-	query := `INSERT INTO chair_distances (chair_id, total_distance, total_distance_updated_at) VALUES `
-
-	// VALUES 部分を構築するスライス
-	values := []string{}
-	args := []interface{}{}
-
-	// データをクエリに追加
-	for chairID, total := range distanceByChair {
-		values = append(values, "(?, ?, ?)")
-		args = append(args, chairID, total.totalDistance, total.lastUpdatedAt)
-	}
-
-	// クエリ文字列を完成させる
-	query += strings.Join(values, ", ")
-
-	// クエリ実行
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
 	if _, err := db.ExecContext(ctx, "UPDATE settings SET value = ? WHERE name = 'payment_gateway_url'", req.PaymentServer); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
