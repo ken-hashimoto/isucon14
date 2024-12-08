@@ -78,8 +78,8 @@ discocat-slow-query:
 # alpでアクセスログを確認する. ~/tool-config/alp/config.ymlを準備してから実行すること.
 .PHONY: alp
 alp:
-	sudo alp ltsv --file=$(NGINX_LOG) --config=/home/isucon/tool-config/alp/config.yml
-
+	# sudo alp ltsv --file=$(NGINX_LOG) --config=/home/isucon/tool-config/alp/config.yml
+	sudo alp ltsv --file=$(NGINX_LOG) -m "/images.*","/api/app/rides/[a-zA-Z0-9]+/evaluation","/api/chair/rides/[a-zA-Z0-9]+/status","assets/*", --sort sum -r
 setup-discocat-config:
 	mkdir -p ${DISCOCAT_TRIPLE_BACK_QUOTES_DIR}
 	echo '```' > ${DISCOCAT_TRIPLE_BACK_QUOTES}
