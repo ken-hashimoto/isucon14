@@ -195,7 +195,20 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
 	owner := ctx.Value("owner").(*Owner)
 
 	chairs := []chairWithDetail{}
-	if err := db.SelectContext(ctx, &chairs, `SELECT id,
+	if err := db.SelectContext(ctx, &chairs, `WITH distance_table AS (
+    SELECT chair_id,
+           SUM(distance) AS total_distance,
+           MAX(created_at) AS total_distance_updated_at
+    FROM (
+        SELECT chair_id,
+               created_at,
+               ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
+               ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
+        FROM chair_locations
+    ) tmp
+    GROUP BY chair_id
+)
+SELECT id,
        owner_id,
        name,
        access_token,
@@ -206,7 +219,7 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
        COALESCE(total_distance, 0) AS total_distance,
        total_distance_updated_at
 FROM chairs
-LEFT JOIN chair_distances ON chair_distances.chair_id = chairs.id
+LEFT JOIN distance_table ON distance_table.chair_id = chairs.id
 WHERE owner_id = ?
 `, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)

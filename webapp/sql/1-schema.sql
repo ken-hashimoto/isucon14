@@ -145,9 +145,3 @@ CREATE TABLE coupons
   PRIMARY KEY (user_id, code)
 )
   COMMENT 'クーポンテーブル';
-
-CREATE TABLE chair_distances (
-    chair_id VARCHAR(26) PRIMARY KEY,      -- 椅子ID
-    total_distance NUMERIC NOT NULL,       -- 総移動距離
-    total_distance_updated_at DATETIME(6) -- 最終更新日時
-);
