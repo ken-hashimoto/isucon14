@@ -149,6 +149,10 @@ CREATE TABLE coupons
   PRIMARY KEY (user_id, code)
 )
   COMMENT 'クーポンテーブル';
+CREATE INDEX idx_user_used_by ON coupons (user_id, used_by);
+CREATE INDEX idx_user_code_used_by ON coupons (user_id, code, used_by);
+CREATE INDEX idx_user_created_at ON coupons (user_id, created_at);
+CREATE INDEX idx_used_by ON coupons (used_by);
 
 DROP TABLE IF EXISTS chair_distances;
 CREATE TABLE chair_distances (
