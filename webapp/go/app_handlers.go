@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/oklog/ulid/v2"
 )
@@ -508,7 +507,7 @@ type appPostRideEvaluationResponse struct {
 
 func appPostRideEvaluatation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rideID := chi.URLParam(r, "ride_id")
+	rideID := r.PathValue("ride_id")
 
 	req := &appPostRideEvaluationRequest{}
 	if err := bindJSON(r, req); err != nil {
@@ -872,57 +871,70 @@ func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// 最適化: 1つのクエリで必要なデータを全て取得
-	query := `
-		SELECT
-			c.id, c.name, c.model,
-			cl.latitude, cl.longitude
-		FROM chairs c
-		INNER JOIN chair_locations cl ON c.id = cl.chair_id
-		LEFT JOIN rides r ON c.id = r.chair_id
-		WHERE
-			c.is_active = true
-			AND (r.id IS NULL OR
-				(SELECT status FROM ride_statuses WHERE ride_id = r.id ORDER BY created_at DESC LIMIT 1) = 'COMPLETED')
-			AND cl.id IN (
-				SELECT MAX(id)
-				FROM chair_locations
-				GROUP BY chair_id
-			)
-		GROUP BY c.id
-		HAVING ABS(cl.latitude - ?) <= ? AND ABS(cl.longitude - ?) <= ?
-	`
-
-	type chairResult struct {
-		ID        string `db:"id"`
-		Name      string `db:"name"`
-		Model     string `db:"model"`
-		Latitude  int    `db:"latitude"`
-		Longitude int    `db:"longitude"`
-	}
-
-	results := []chairResult{}
+	chairs := []Chair{}
 	err = tx.SelectContext(
 		ctx,
-		&results,
-		query,
-		lat, distance, lon, distance,
+		&chairs,
+		`SELECT * FROM chairs`,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	nearbyChairs := make([]appGetNearbyChairsResponseChair, 0, len(results))
-	for _, result := range results {
-		if calculateDistance(coordinate.Latitude, coordinate.Longitude, result.Latitude, result.Longitude) <= distance {
+	nearbyChairs := []appGetNearbyChairsResponseChair{}
+	for _, chair := range chairs {
+		if !chair.IsActive {
+			continue
+		}
+
+		rides := []*Ride{}
+		if err := tx.SelectContext(ctx, &rides, `SELECT * FROM rides WHERE chair_id = ? ORDER BY created_at DESC`, chair.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		skip := false
+		for _, ride := range rides {
+			// 過去にライドが存在し、かつ、それが完了していない場合はスキップ
+			status, err := getLatestRideStatus(ctx, tx, ride.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if status != "COMPLETED" {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+
+		// 最新の位置情報を取得
+		chairLocation := &ChairLocation{}
+		err = tx.GetContext(
+			ctx,
+			chairLocation,
+			`SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1`,
+			chair.ID,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if calculateDistance(coordinate.Latitude, coordinate.Longitude, chairLocation.Latitude, chairLocation.Longitude) <= distance {
 			nearbyChairs = append(nearbyChairs, appGetNearbyChairsResponseChair{
-				ID:    result.ID,
-				Name:  result.Name,
-				Model: result.Model,
+				ID:    chair.ID,
+				Name:  chair.Name,
+				Model: chair.Model,
 				CurrentCoordinate: Coordinate{
-					Latitude:  result.Latitude,
-					Longitude: result.Longitude,
+					Latitude:  chairLocation.Latitude,
+					Longitude: chairLocation.Longitude,
 				},
 			})
 		}
