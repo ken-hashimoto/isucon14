@@ -196,6 +196,25 @@ func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
 
 	chairs := []chairWithDetail{}
 	if err := db.SelectContext(ctx, &chairs, `
+WITH relevant_chairs AS (
+    SELECT id AS chair_id
+    FROM chairs
+    WHERE owner_id = ?
+),
+distance_table AS (
+    SELECT chair_id,
+           SUM(distance) AS total_distance,
+           MAX(created_at) AS total_distance_updated_at
+    FROM (
+        SELECT chair_id,
+               created_at,
+               ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
+               ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
+        FROM chair_locations
+        WHERE chair_id IN (SELECT chair_id FROM relevant_chairs)
+    ) tmp
+    GROUP BY chair_id
+)
 SELECT c.id,
        c.owner_id,
        c.name,
@@ -204,12 +223,12 @@ SELECT c.id,
        c.is_active,
        c.created_at,
        c.updated_at,
-       COALESCE(d.total_distance, 0) AS total_distance,
-       d.total_distance_updated_at
+       COALESCE(dt.total_distance, 0) AS total_distance,
+       dt.total_distance_updated_at
 FROM chairs c
-LEFT JOIN chair_distances d ON d.chair_id = c.id
+LEFT JOIN distance_table dt ON dt.chair_id = c.id
 WHERE c.owner_id = ?
-`, owner.ID); err != nil {
+`, owner.ID, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -233,3 +252,47 @@ WHERE c.owner_id = ?
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+// func ownerGetChairs(w http.ResponseWriter, r *http.Request) {
+// 	ctx := r.Context()
+// 	owner := ctx.Value("owner").(*Owner)
+
+// 	chairs := []chairWithDetail{}
+// 	if err := db.SelectContext(ctx, &chairs, `
+// SELECT c.id,
+//        c.owner_id,
+//        c.name,
+//        c.access_token,
+//        c.model,
+//        c.is_active,
+//        c.created_at,
+//        c.updated_at,
+//        COALESCE(d.total_distance, 0) AS total_distance,
+//        d.total_distance_updated_at
+// FROM chairs c
+// LEFT JOIN chair_distances d ON d.chair_id = c.id
+// WHERE c.owner_id = ?
+// `, owner.ID, owner.ID); err != nil {
+// 		writeError(w, http.StatusInternalServerError, err)
+// 		return
+// 	}
+
+// 	res := ownerGetChairResponse{}
+// 	res.Chairs = make([]ownerGetChairResponseChair, len(chairs))
+// 	for i, chair := range chairs {
+// 		c := ownerGetChairResponseChair{
+// 			ID:            chair.ID,
+// 			Name:          chair.Name,
+// 			Model:         chair.Model,
+// 			Active:        chair.IsActive,
+// 			RegisteredAt:  chair.CreatedAt.UnixMilli(),
+// 			TotalDistance: chair.TotalDistance,
+// 		}
+// 		if chair.TotalDistanceUpdatedAt.Valid {
+// 			t := chair.TotalDistanceUpdatedAt.Time.UnixMilli()
+// 			c.TotalDistanceUpdatedAt = &t
+// 		}
+// 		res.Chairs[i] = c
+// 	}
+// 	writeJSON(w, http.StatusOK, res)
+// }
