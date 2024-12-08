@@ -222,7 +222,7 @@ SELECT id,
 FROM chairs
 LEFT JOIN distance_table ON distance_table.chair_id = chairs.id
 WHERE owner_id = ?
-`, owner.ID); err != nil {
+`, owner.ID, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
