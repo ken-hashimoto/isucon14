@@ -1,9 +1,9 @@
 package main
 
 import (
-	crand "crypto/rand"
 	"fmt"
 	"log/slog"
+	mathrand "math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -185,7 +185,7 @@ func writeError(w http.ResponseWriter, statusCode int, err error) {
 
 func secureRandomStr(b int) string {
 	k := make([]byte, b)
-	if _, err := crand.Read(k); err != nil {
+	if _, err := mathrand.Read(k); err != nil {
 		panic(err)
 	}
 	return fmt.Sprintf("%x", k)
