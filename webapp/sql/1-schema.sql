@@ -146,6 +146,7 @@ CREATE TABLE coupons
 )
   COMMENT 'クーポンテーブル';
 
+DROP TABLE IF EXISTS chair_distances;
 CREATE TABLE chair_distances (
     chair_id VARCHAR(26) PRIMARY KEY,      -- 椅子ID
     total_distance NUMERIC NOT NULL,       -- 総移動距離
