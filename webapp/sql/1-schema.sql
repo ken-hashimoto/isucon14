@@ -36,7 +36,7 @@ CREATE TABLE chairs
 )
   COMMENT = '椅子情報テーブル';
 CREATE INDEX idx_chairs_owner_id ON chairs (owner_id);
-CREATE INDEX idx_chairs_owner_id ON chairs (is_active);
+CREATE INDEX idx_chairs_is_active ON chairs (is_active);
 
 DROP TABLE IF EXISTS chair_locations;
 CREATE TABLE chair_locations
