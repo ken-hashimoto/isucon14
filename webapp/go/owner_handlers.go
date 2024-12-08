@@ -209,7 +209,7 @@ SELECT c.id,
 FROM chairs c
 LEFT JOIN chair_distances d ON d.chair_id = c.id
 WHERE c.owner_id = ?
-`, owner.ID, owner.ID); err != nil {
+`, owner.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
