@@ -507,7 +507,7 @@ type appPostRideEvaluationResponse struct {
 
 func appPostRideEvaluatation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rideID := r.PathValue("ride_id")
+	rideID := chi.URLParam(r, "ride_id")
 
 	req := &appPostRideEvaluationRequest{}
 	if err := bindJSON(r, req); err != nil {
